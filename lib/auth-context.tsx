@@ -1,0 +1,57 @@
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import * as api from './api-client';
+import type { Tenant } from './types';
+
+type AuthContextValue = {
+  isLoggedIn: boolean;
+  isLoading: boolean;
+  tenant: Tenant | null;
+  login: (email: string, password: string) => Promise<void>;
+  register: (name: string, email: string, password: string, unitId: string) => Promise<void>;
+  logout: () => Promise<void>;
+};
+
+const AuthContext = createContext<AuthContextValue | null>(null);
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [tenant, setTenant] = useState<Tenant | null>(null);
+
+  useEffect(() => {
+    api.isLoggedIn().then(async (value) => {
+      setIsLoggedIn(value);
+      if (value) setTenant(await api.getMe().catch(() => null));
+      setIsLoading(false);
+    });
+  }, []);
+
+  const value: AuthContextValue = {
+    isLoggedIn,
+    isLoading,
+    tenant,
+    login: async (email, password) => {
+      await api.login(email, password);
+      setIsLoggedIn(true);
+      setTenant(await api.getMe().catch(() => null));
+    },
+    register: async (name, email, password, unitId) => {
+      await api.register(name, email, password, unitId);
+      setIsLoggedIn(true);
+      setTenant(await api.getMe().catch(() => null));
+    },
+    logout: async () => {
+      await api.logout();
+      setIsLoggedIn(false);
+      setTenant(null);
+    },
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+export function useAuth(): AuthContextValue {
+  const context = useContext(AuthContext);
+  if (!context) throw new Error('useAuth must be used within an AuthProvider');
+  return context;
+}
