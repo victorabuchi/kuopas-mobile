@@ -13,31 +13,27 @@ web app; nothing here is redesigned or invented.
 
 ## What's in this first commit
 
-A working scaffold with real screens wired to a not-yet-built API layer:
+A working scaffold with real screens wired to a live API layer:
 
 - `app/login.tsx`, `app/register.tsx` — ported from `kuopas/web/src/app/login` and `.../register`
 - `app/(tabs)/feed.tsx` — ported from `kuopas/web/src/app/(app)/feed` (announcements/noticeboard tabs, reactions, comments, reports)
 - `app/(tabs)/chats.tsx` and `app/chat/[groupId].tsx` — ported from `kuopas/web/src/app/(app)/chats` and `.../chat/[groupId]`
 - `lib/dictionary.ts` — copied verbatim from the web app; full English/Finnish strings for every screen, not just the ones wired up so far
-- `lib/api-client.ts` — typed client for a `/api/mobile/*` JSON API
+- `lib/api-client.ts` — typed client for the `/api/mobile/*` JSON API
 
-## Backend gap: server actions vs. a mobile API
+## Backend: server actions vs. the mobile API
 
-The web app has no REST/JSON endpoints today — every mutation and query goes
-through Next.js server actions (`'use server'` functions) tied to a
-same-origin, cookie-based session (`kuopas_session`). Server actions aren't
-meant to be called from outside the Next.js app, so the mobile client can't
-reuse them directly.
-
-`lib/api-client.ts` calls a `/api/mobile/*` surface that mirrors each server
-action's logic and field names exactly (see the comment above each function
-for which web file it corresponds to), but those routes don't exist in the
-web repo yet. Before this app can talk to real data, `kuopas/web` needs route
-handlers under `src/app/api/mobile/` that:
-
-- Authenticate via a bearer token instead of the `kuopas_session` cookie
-- Wrap the same Prisma queries/mutations already in `src/lib/*-actions.ts`
-- Return JSON instead of doing a `redirect()`
+The web app's own pages still run on Next.js server actions (`'use server'`
+functions) behind a same-origin, cookie-based session (`kuopas_session`) —
+those aren't callable from outside the Next.js app. `kuopas/web` (commit
+`19d1fef`, "Add the /api/mobile/* bridge for the Expo app") now also exposes a
+parallel `/api/mobile/*` surface that wraps the same Prisma queries and
+`src/lib/*-actions.ts` mutations behind a bearer token instead of the cookie,
+returning JSON instead of doing a `redirect()`. Response shapes are kept in
+`kuopas/web/src/lib/mobile-serializers.ts`, matching `lib/types.ts` here
+field-for-field by hand, since the two repos don't share a package — tested
+end to end against the dev DB (login/register, buildings, `/me`, the full
+feed loop, the full chats loop, and a 401 on an unauthenticated request).
 
 ## Running
 
@@ -46,5 +42,7 @@ npm install
 npm run ios      # or: npm run android / npm run web
 ```
 
-Set `EXPO_PUBLIC_API_URL` (defaults to `http://localhost:3000`) to point at
-the web app's dev server once the `/api/mobile/*` routes exist.
+Point `EXPO_PUBLIC_API_URL` at the web app's dev server. `http://localhost:3000`
+only works from the iOS simulator (it shares the host's network); a physical
+device needs your machine's LAN IP (e.g. `http://192.168.1.23:3000`), and the
+Android emulator needs `http://10.0.2.2:3000`.
