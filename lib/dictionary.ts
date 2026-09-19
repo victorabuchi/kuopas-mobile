@@ -69,6 +69,8 @@ const en = {
   login: {
     heading: 'Log in',
     lede: 'Access your building, stairwell, and floor chats.',
+    google: 'Continue with Google',
+    orShort: 'or',
     suomiFi: 'Log in with Suomi.fi',
     comingSoon: 'Coming soon',
     or: 'or continue with email',
@@ -375,6 +377,8 @@ const fi: typeof en = {
   login: {
     heading: 'Kirjaudu sisään',
     lede: 'Pääset talosi, rappukäytäväsi ja kerroksesi keskusteluihin.',
+    google: 'Jatka Googlella',
+    orShort: 'tai',
     suomiFi: 'Kirjaudu Suomi.fi:llä',
     comingSoon: 'Tulossa',
     or: 'tai jatka sähköpostilla',

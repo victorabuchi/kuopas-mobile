@@ -1,4 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
+import * as WebBrowser from 'expo-web-browser';
 import type {
   Building,
   BuildingPost,
@@ -56,6 +57,23 @@ export async function login(email: string, password: string): Promise<void> {
     body: { email: normalizedEmail, password },
   });
   await SecureStore.setItemAsync(TOKEN_KEY, token);
+}
+
+// Opens the web Google flow in an auth session. The server finishes at the
+// kuopas://auth deep link with either ?token=... or ?error=...
+export async function loginWithGoogle(): Promise<boolean> {
+  const result = await WebBrowser.openAuthSessionAsync(`${API_BASE_URL}/api/auth/google?intent=mobile`, 'kuopas://auth');
+  if (result.type !== 'success') return false;
+
+  const query = result.url.split('?')[1] ?? '';
+  const params = new URLSearchParams(query);
+  const error = params.get('error');
+  if (error) throw new ApiError(error);
+  const token = params.get('token');
+  if (!token) throw new ApiError('Google sign-in failed.');
+
+  await SecureStore.setItemAsync(TOKEN_KEY, token);
+  return true;
 }
 
 // Mirrors registerAction in kuopas/web/src/lib/auth-actions.ts

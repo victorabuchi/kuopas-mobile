@@ -7,7 +7,7 @@ import { useDictionary } from '../lib/use-dictionary';
 
 export default function LoginScreen() {
   const { locale, setLocale, dict } = useDictionary();
-  const { login } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
   const t = dict.login;
 
   const [email, setEmail] = useState('');
@@ -26,6 +26,15 @@ export default function LoginScreen() {
       setError('Incorrect email or password.');
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function onGoogle() {
+    setError(null);
+    try {
+      if (await loginWithGoogle()) router.replace('/(tabs)/feed');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Google sign-in failed.');
     }
   }
 
@@ -81,6 +90,11 @@ export default function LoginScreen() {
           </Pressable>
         </View>
 
+        <Text style={styles.divider}>{dict.login.orShort}</Text>
+        <Pressable style={styles.googleBtn} onPress={onGoogle}>
+          <Text style={styles.googleText}>{dict.login.google}</Text>
+        </Pressable>
+
         <Text style={styles.footerNote}>
           {t.newTenant} <Link href="/register">{t.register}</Link>
         </Text>
@@ -109,5 +123,7 @@ const styles = StyleSheet.create({
   input: { borderWidth: 1, borderColor: '#d8dbe0', borderRadius: 10, padding: 12, fontSize: 15 },
   submit: { backgroundColor: '#2f7d5c', borderRadius: 10, padding: 14, alignItems: 'center' },
   submitText: { color: '#fff', fontWeight: '600', fontSize: 15 },
+  googleBtn: { backgroundColor: '#f6f8fa', borderWidth: 1, borderColor: '#d0d7de', borderRadius: 10, padding: 13, alignItems: 'center' },
+  googleText: { color: '#1a1a18', fontWeight: '600', fontSize: 15 },
   footerNote: { textAlign: 'center', fontSize: 13, color: '#5b616e' },
 });

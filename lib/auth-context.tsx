@@ -7,6 +7,7 @@ type AuthContextValue = {
   isLoading: boolean;
   tenant: Tenant | null;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => Promise<boolean>;
   register: (name: string, email: string, password: string, unitId: string) => Promise<void>;
   logout: () => Promise<void>;
 };
@@ -34,6 +35,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api.login(email, password);
       setIsLoggedIn(true);
       setTenant(await api.getMe().catch(() => null));
+    },
+    loginWithGoogle: async () => {
+      const signedIn = await api.loginWithGoogle();
+      if (signedIn) {
+        setIsLoggedIn(true);
+        setTenant(await api.getMe().catch(() => null));
+      }
+      return signedIn;
     },
     register: async (name, email, password, unitId) => {
       await api.register(name, email, password, unitId);
