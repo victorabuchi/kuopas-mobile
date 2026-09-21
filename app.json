@@ -22,7 +22,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "permissions": [
+      "package": "fi.kuopas.app",
+      "blockedPermissions": [
         "android.permission.RECORD_AUDIO"
       ]
     },
