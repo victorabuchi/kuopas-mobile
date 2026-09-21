@@ -1,44 +1,37 @@
 import { useCallback, useEffect, useState } from 'react';
-import {
-  ActivityIndicator,
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ActivityIndicator, Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import * as api from '../../lib/api-client';
 import { useAuth } from '../../lib/auth-context';
+import type { Locale } from '../../lib/i18n';
+import type { getDictionary } from '../../lib/dictionary';
 import { displayNameFor } from '../../lib/names';
-import type { BuildingPost, BuildingPostType, NoticeboardCategory } from '../../lib/types';
-import { useDictionary } from '../../lib/use-dictionary';
+import { pickPhoto } from '../../lib/pick-photo';
+import { colors, initials } from '../../lib/theme';
+import type { BuildingPost, BuildingPostType, NoticeboardCategory, PhotoAttachment } from '../../lib/types';
 
-const TAB_VALUES: BuildingPostType[] = ['announcement', 'noticeboard'];
 const CATEGORY_VALUES: NoticeboardCategory[] = ['furniture', 'lost_found', 'borrow', 'giveaway', 'other'];
 
-function initials(name: string): string {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? '')
-    .join('');
-}
-
-export default function FeedScreen() {
-  const { locale, dict } = useDictionary();
+// Mirrors FeedTab in kuopas/web/src/app/(app)/messages/page.tsx
+export default function FeedTab({
+  tab,
+  locale,
+  dict,
+}: {
+  tab: BuildingPostType;
+  locale: Locale;
+  dict: ReturnType<typeof getDictionary>;
+}) {
   const { tenant } = useAuth();
   const t = dict.feedBoard;
 
-  const [tab, setTab] = useState<BuildingPostType>('announcement');
   const [posts, setPosts] = useState<BuildingPost[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [category, setCategory] = useState<NoticeboardCategory>('furniture');
+  const [photo, setPhoto] = useState<PhotoAttachment | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
 
   const categoryLabel: Record<NoticeboardCategory, string> = {
@@ -53,7 +46,10 @@ export default function FeedScreen() {
     setIsLoading(true);
     api
       .getFeed(tab)
-      .then(setPosts)
+      .then((loaded) => {
+        setPosts(loaded);
+        if (tab === 'announcement') api.markPostsRead(loaded.map((p) => p.id)).catch(() => {});
+      })
       .catch(() => setPosts([]))
       .finally(() => setIsLoading(false));
   }, [tab]);
@@ -61,11 +57,17 @@ export default function FeedScreen() {
   useEffect(loadPosts, [loadPosts]);
 
   async function onSubmitPost() {
-    if (!title || !content) return;
-    const post = await api.createNoticeboardPost(title, content, category);
-    setPosts((prev) => [post, ...prev]);
-    setTitle('');
-    setContent('');
+    if (!title.trim() || !content.trim()) return;
+    setError(null);
+    try {
+      const post = await api.createNoticeboardPost(title, content, category, photo);
+      setPosts((prev) => [post, ...prev]);
+      setTitle('');
+      setContent('');
+      setPhoto(null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not post.');
+    }
   }
 
   async function onReact(postId: string) {
@@ -74,7 +76,7 @@ export default function FeedScreen() {
   }
 
   async function onComment(postId: string) {
-    const text = commentDrafts[postId];
+    const text = commentDrafts[postId]?.trim();
     if (!text) return;
     const comment = await api.commentOnPost(postId, text);
     setPosts((prev) =>
@@ -83,24 +85,8 @@ export default function FeedScreen() {
     setCommentDrafts((prev) => ({ ...prev, [postId]: '' }));
   }
 
-  async function onReport(target: { postId?: string; commentId?: string }) {
-    await api.reportPost(target);
-  }
-
   return (
-    <ScrollView style={styles.page} contentContainerStyle={styles.pageContent}>
-      <Text style={styles.pageTitle}>{t.title}</Text>
-
-      <View style={styles.tabs}>
-        {TAB_VALUES.map((value) => (
-          <Pressable key={value} onPress={() => setTab(value)} style={[styles.tab, tab === value && styles.tabActive]}>
-            <Text style={tab === value ? styles.tabTextActive : styles.tabText}>
-              {value === 'announcement' ? t.tabAnnouncements : t.tabNoticeboard}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-
+    <ScrollView style={styles.page} contentContainerStyle={styles.pageContent} keyboardShouldPersistTaps="handled">
       {tab === 'noticeboard' && (
         <View style={styles.composer}>
           <TextInput value={title} onChangeText={setTitle} placeholder={t.postTitle} style={styles.input} />
@@ -124,6 +110,11 @@ export default function FeedScreen() {
             multiline
             style={[styles.input, styles.textarea]}
           />
+          <Pressable style={styles.photoBtn} onPress={async () => setPhoto(await pickPhoto())}>
+            <Text style={styles.photoBtnText}>{photo ? photo.name : t.photo}</Text>
+          </Pressable>
+          {photo && <Image source={{ uri: photo.uri }} style={styles.photoPreview} />}
+          {error && <Text style={styles.error}>{error}</Text>}
           <Pressable style={styles.submit} onPress={onSubmitPost}>
             <Text style={styles.submitText}>{t.submit}</Text>
           </Pressable>
@@ -139,13 +130,13 @@ export default function FeedScreen() {
       {posts.map((post) => {
         const senderName = post.authorStaff ? t.kuopas : displayNameFor(post.authorTenant!, 'building');
         const reacted = tenant ? post.reactions.some((r) => r.tenantId === tenant.id) : false;
-        const title = locale === 'en' && post.titleEn ? post.titleEn : post.title;
+        const postTitle = locale === 'en' && post.titleEn ? post.titleEn : post.title;
         const body = locale === 'en' && post.contentEn ? post.contentEn : post.content;
 
         return (
           <View key={post.id} style={styles.post}>
             <View style={styles.postHeader}>
-              <View style={styles.postAvatar}>
+              <View style={[styles.postAvatar, !post.authorStaff && styles.postAvatarNoticeboard]}>
                 <Text style={styles.postAvatarText}>{initials(senderName)}</Text>
               </View>
               <View>
@@ -154,9 +145,9 @@ export default function FeedScreen() {
               </View>
             </View>
 
-            <Text style={styles.postTitle}>{title}</Text>
+            <Text style={styles.postTitle}>{postTitle}</Text>
             <Text style={styles.postContent}>{body}</Text>
-            {post.photoUrl && <Image source={{ uri: post.photoUrl }} style={styles.postPhoto} />}
+            {post.photoUrl && <Image source={{ uri: api.mediaUrl(post.photoUrl) }} style={styles.postPhoto} />}
             {post.noticeboardCategory && (
               <Text style={styles.categoryBadge}>{categoryLabel[post.noticeboardCategory]}</Text>
             )}
@@ -169,7 +160,7 @@ export default function FeedScreen() {
               </Pressable>
               {post.type === 'announcement' && <Text style={styles.reactionsOnlyNote}>{t.reactionsOnly}</Text>}
               {post.authorTenant && tenant && post.authorTenant.id !== tenant.id && (
-                <Pressable onPress={() => onReport({ postId: post.id })}>
+                <Pressable onPress={() => api.reportPost({ postId: post.id })}>
                   <Text style={styles.postAction}>{t.report}</Text>
                 </Pressable>
               )}
@@ -184,7 +175,7 @@ export default function FeedScreen() {
                         <Text style={styles.commentAuthor}>{displayNameFor(comment.author, 'building')}</Text>
                         <Text>{comment.content}</Text>
                         {tenant && comment.author.id !== tenant.id && (
-                          <Pressable onPress={() => onReport({ commentId: comment.id })}>
+                          <Pressable onPress={() => api.reportPost({ commentId: comment.id })}>
                             <Text style={styles.commentReport}>{t.reportComment}</Text>
                           </Pressable>
                         )}
@@ -213,60 +204,60 @@ export default function FeedScreen() {
 }
 
 const styles = StyleSheet.create({
-  page: { flex: 1, backgroundColor: '#f5f6f8' },
+  page: { flex: 1, backgroundColor: colors.bg },
   pageContent: { padding: 16, gap: 16 },
-  pageTitle: { fontSize: 22, fontWeight: '700' },
-  tabs: { flexDirection: 'row', gap: 8 },
-  tab: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: '#e9ebee' },
-  tabActive: { backgroundColor: '#2f7d5c' },
-  tabText: { color: '#5b616e', fontSize: 13 },
-  tabTextActive: { color: '#fff', fontSize: 13, fontWeight: '600' },
-  composer: { backgroundColor: '#fff', borderRadius: 12, padding: 12, gap: 8 },
-  input: { borderWidth: 1, borderColor: '#d8dbe0', borderRadius: 10, padding: 10, fontSize: 14 },
+  composer: { backgroundColor: colors.card, borderRadius: 12, padding: 12, gap: 8 },
+  input: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10, fontSize: 14 },
   textarea: { minHeight: 80, textAlignVertical: 'top' },
   categoryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  categoryChip: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, backgroundColor: '#e9ebee' },
-  categoryChipActive: { backgroundColor: '#2f7d5c' },
-  categoryChipText: { fontSize: 12, color: '#5b616e' },
+  categoryChip: { paddingVertical: 6, paddingHorizontal: 10, borderRadius: 16, backgroundColor: colors.chip },
+  categoryChipActive: { backgroundColor: colors.accent },
+  categoryChipText: { fontSize: 12, color: colors.muted },
   categoryChipTextActive: { fontSize: 12, color: '#fff', fontWeight: '600' },
-  submit: { backgroundColor: '#2f7d5c', borderRadius: 10, padding: 12, alignItems: 'center' },
+  photoBtn: { borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 10 },
+  photoBtnText: { fontSize: 13, color: colors.muted },
+  photoPreview: { width: '100%', height: 140, borderRadius: 10 },
+  error: { color: colors.danger, fontSize: 13 },
+  submit: { backgroundColor: colors.accent, borderRadius: 10, padding: 12, alignItems: 'center' },
   submitText: { color: '#fff', fontWeight: '600' },
   loading: { marginTop: 24 },
-  empty: { textAlign: 'center', color: '#8a8f98', marginTop: 24 },
-  post: { backgroundColor: '#fff', borderRadius: 12, padding: 14, gap: 8 },
+  empty: { textAlign: 'center', color: colors.faint, marginTop: 24 },
+  post: { backgroundColor: colors.card, borderRadius: 12, padding: 14, gap: 8 },
   postHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   postAvatar: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#eaf5ef',
+    backgroundColor: colors.accent,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  postAvatarText: { color: '#2f7d5c', fontWeight: '700', fontSize: 12 },
+  postAvatarNoticeboard: { backgroundColor: colors.accentSoft },
+  postAvatarText: { color: colors.accent, fontWeight: '700', fontSize: 12 },
   postSender: { fontWeight: '600', fontSize: 14 },
-  postMeta: { fontSize: 12, color: '#8a8f98' },
+  postMeta: { fontSize: 12, color: colors.faint },
   postTitle: { fontWeight: '700', fontSize: 15 },
-  postContent: { fontSize: 14, color: '#2c2f36' },
+  postContent: { fontSize: 14, color: colors.body },
   postPhoto: { width: '100%', height: 180, borderRadius: 10 },
   categoryBadge: {
     alignSelf: 'flex-start',
     fontSize: 11,
-    color: '#2f7d5c',
-    backgroundColor: '#eaf5ef',
+    color: colors.accent,
+    backgroundColor: colors.accentSoft,
     paddingVertical: 3,
     paddingHorizontal: 8,
     borderRadius: 10,
+    overflow: 'hidden',
   },
   postActions: { flexDirection: 'row', alignItems: 'center', gap: 16 },
-  postAction: { fontSize: 13, color: '#5b616e' },
-  postActionActive: { color: '#2f7d5c', fontWeight: '700' },
-  reactionsOnlyNote: { fontSize: 12, color: '#8a8f98' },
+  postAction: { fontSize: 13, color: colors.muted },
+  postActionActive: { color: colors.accent, fontWeight: '700' },
+  reactionsOnlyNote: { fontSize: 12, color: colors.faint },
   commentsPreview: { gap: 4 },
-  comment: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, fontSize: 13 },
+  comment: { flexDirection: 'row', flexWrap: 'wrap', gap: 4 },
   commentAuthor: { fontWeight: '600', fontSize: 13 },
-  commentReport: { fontSize: 11, color: '#8a8f98' },
+  commentReport: { fontSize: 11, color: colors.faint },
   commentForm: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  commentInput: { flex: 1, borderWidth: 1, borderColor: '#d8dbe0', borderRadius: 10, padding: 8, fontSize: 13 },
-  commentSubmit: { color: '#2f7d5c', fontWeight: '600', fontSize: 13 },
+  commentInput: { flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 8, fontSize: 13 },
+  commentSubmit: { color: colors.accent, fontWeight: '600', fontSize: 13 },
 });

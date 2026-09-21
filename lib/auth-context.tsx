@@ -1,15 +1,16 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import * as api from './api-client';
-import type { Tenant } from './types';
+import type { Profile } from './types';
 
 type AuthContextValue = {
   isLoggedIn: boolean;
   isLoading: boolean;
-  tenant: Tenant | null;
+  tenant: Profile | null;
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: () => Promise<boolean>;
   register: (name: string, email: string, password: string, unitId: string) => Promise<void>;
   logout: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -17,7 +18,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [tenant, setTenant] = useState<Tenant | null>(null);
+  const [tenant, setTenant] = useState<Profile | null>(null);
 
   useEffect(() => {
     api.isLoggedIn().then(async (value) => {
@@ -47,6 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     register: async (name, email, password, unitId) => {
       await api.register(name, email, password, unitId);
       setIsLoggedIn(true);
+      setTenant(await api.getMe().catch(() => null));
+    },
+    refreshProfile: async () => {
       setTenant(await api.getMe().catch(() => null));
     },
     logout: async () => {

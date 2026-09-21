@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getDictionary } from './dictionary';
+import { getLiving } from './living';
 import { getLocale, setLocale as persistLocale, type Locale } from './i18n';
 
 export function useDictionary() {
@@ -14,5 +15,5 @@ export function useDictionary() {
     persistLocale(next);
   }, []);
 
-  return { locale, setLocale, dict: getDictionary(locale) };
+  return { locale, setLocale, dict: getDictionary(locale), living: getLiving(locale) };
 }

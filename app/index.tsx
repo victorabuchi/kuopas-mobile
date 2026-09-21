@@ -7,5 +7,5 @@ export default function Index() {
 
   if (isLoading) return <View style={{ flex: 1 }} />;
 
-  return <Redirect href={isLoggedIn ? '/(tabs)/feed' : '/login'} />;
+  return <Redirect href={isLoggedIn ? '/(tabs)/home' : '/login'} />;
 }

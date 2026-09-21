@@ -19,7 +19,8 @@ import { useDictionary } from '../../lib/use-dictionary';
 
 export default function ChatThreadScreen() {
   const { groupId } = useLocalSearchParams<{ groupId: string }>();
-  const { dict } = useDictionary();
+  const { dict, living } = useDictionary();
+  const h = living.household;
   const { tenant } = useAuth();
   const t = dict.chatThread;
 
@@ -35,6 +36,13 @@ export default function ChatThreadScreen() {
       .catch(() => setThread(null))
       .finally(() => setIsLoading(false));
   }, [groupId]);
+
+  async function onReport(messageId: string) {
+    await api.reportChatMessage(groupId, messageId);
+    setThread((prev) =>
+      prev ? { ...prev, messages: prev.messages.map((m) => (m.id === messageId ? { ...m, reported: true } : m)) } : prev,
+    );
+  }
 
   async function onSend() {
     if (!draft.trim()) return;
@@ -85,11 +93,23 @@ export default function ChatThreadScreen() {
             <View style={[styles.row, isOwn ? styles.rowOut : styles.rowIn]}>
               {!isOwn && <Text style={styles.senderName}>{displayNameFor(item.sender, thread.group.scope)}</Text>}
               <View style={[styles.bubble, isOwn ? styles.bubbleOut : styles.bubbleIn]}>
-                <Text style={isOwn ? styles.bubbleTextOut : styles.bubbleTextIn}>{item.content}</Text>
+                {item.removed ? (
+                  <Text style={[styles.bubbleTextIn, styles.removed]}>{h.removedMessage}</Text>
+                ) : (
+                  <Text style={isOwn ? styles.bubbleTextOut : styles.bubbleTextIn}>{item.content}</Text>
+                )}
                 <Text style={styles.time}>
                   {new Date(item.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </Text>
               </View>
+              {!isOwn && !item.removed &&
+                (item.reported ? (
+                  <Text style={styles.reportDone}>{h.reported}</Text>
+                ) : (
+                  <Pressable onPress={() => onReport(item.id)}>
+                    <Text style={styles.reportBtn}>{h.report}</Text>
+                  </Pressable>
+                ))}
             </View>
           );
         }}
@@ -123,7 +143,7 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#eceef1',
   },
-  back: { fontSize: 28, color: '#2f7d5c' },
+  back: { fontSize: 28, color: '#046a38' },
   topBarTitle: { fontWeight: '700', fontSize: 16 },
   topBarSubtitle: { fontSize: 12, color: '#8a8f98' },
   messages: { flex: 1 },
@@ -135,9 +155,12 @@ const styles = StyleSheet.create({
   senderName: { fontSize: 12, color: '#8a8f98' },
   bubble: { borderRadius: 14, paddingVertical: 8, paddingHorizontal: 12, gap: 2 },
   bubbleIn: { backgroundColor: '#fff' },
-  bubbleOut: { backgroundColor: '#2f7d5c' },
+  bubbleOut: { backgroundColor: '#046a38' },
   bubbleTextIn: { color: '#111', fontSize: 14 },
   bubbleTextOut: { color: '#fff', fontSize: 14 },
+  removed: { fontStyle: 'italic', color: '#8a8f98' },
+  reportBtn: { fontSize: 11, color: '#8a8f98' },
+  reportDone: { fontSize: 11, color: '#8a8f98' },
   time: { fontSize: 10, color: '#8a8f98', alignSelf: 'flex-end' },
   composer: {
     flexDirection: 'row',
@@ -152,7 +175,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#2f7d5c',
+    backgroundColor: '#046a38',
     alignItems: 'center',
     justifyContent: 'center',
   },

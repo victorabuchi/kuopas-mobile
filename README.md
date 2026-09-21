@@ -11,15 +11,40 @@ web app; nothing here is redesigned or invented.
 - TypeScript, React Native
 - `expo-secure-store` for the session token and locale preference
 
-## What's in this first commit
+## Features
 
-A working scaffold with real screens wired to a live API layer:
+Resident features of the web app, with the same copy (`lib/dictionary.ts` is
+copied verbatim), rules and validation. The web sidebar becomes five bottom
+tabs, with the rest under **More**.
 
-- `app/login.tsx`, `app/register.tsx` — ported from `kuopas/web/src/app/login` and `.../register`
-- `app/(tabs)/feed.tsx` — ported from `kuopas/web/src/app/(app)/feed` (announcements/noticeboard tabs, reactions, comments, reports)
-- `app/(tabs)/chats.tsx` and `app/chat/[groupId].tsx` — ported from `kuopas/web/src/app/(app)/chats` and `.../chat/[groupId]`
-- `lib/dictionary.ts` — copied verbatim from the web app; full English/Finnish strings for every screen, not just the ones wired up so far
-- `lib/api-client.ts` — typed client for the `/api/mobile/*` JSON API
+| Tab | Screen | Web source |
+| --- | --- | --- |
+| Feed | News tabs (news/announcements/promotions/discounts/events) and the move-in welcome overlay | `(app)/home`, `MoveInGuideOverlay` |
+| Chats | Building, stairwell, floor and apartment group chats | `(app)/chats`, `(app)/chat/[groupId]` |
+| Communities | Create, join, leave and chat in public communities | `(app)/communities` |
+| Messages | Kuopas chat, announcements (with read receipts), noticeboard (posts, photos, reactions, replies, reports), complaints (with photo and status thread), support contacts, resident DMs | `(app)/messages`, `(app)/complaints`, `(app)/messages/[conversationId]` |
+| More | Calls, Booking, Household, Roommates, Marketplace, Lease, Wellbeing, Settings | `(app)/calls`, `booking`, `household`, `roommates`, `marketplace`, `lease`, `wellbeing`, `settings` |
+
+More, in detail:
+
+- **Booking** is the hub: invitations, everything your apartment can book, and your upcoming bookings. It leads to Laundry, Sauna (group turns), Parking and building-defined spaces (common room, gym, study room, grill) with multi-hour and group bookings.
+- **Household** has bill splitting with weighted shares and running balances, a chore wheel, and the apartment board (chat messages can be reported).
+- **Roommates** is the eight-question matching wizard, ranked matches, connections and messaging (verified residents only).
+- **Marketplace** covers sublet and room-swap listings and requests (verified residents only; staff approval happens on the web).
+- **Lease** covers the lease and rent schedule, guarantor requests, identity verification (university-email code or a document upload) and My room.
+- **Wellbeing** sends a support request with explicit consent to share.
+- Complaints accept a photo and a short video.
+
+Sign-in: email/password and Google (opens the web flow, returns to the app
+through the `kuopas://auth` deep link).
+
+Not ported (web only): the staff portal and admin pages (including staff review of
+verifications, leases, marketplace deals and wellbeing cases), the landing page,
+the terms/privacy pages, and web push notifications.
+
+`lib/dictionary.ts`, `lib/living/`, `lib/booking-grid.ts`, `lib/laundry.ts`,
+`lib/sauna.ts`, `lib/matching.ts`, `lib/split.ts` and `lib/lease.ts` are verbatim
+copies of their web counterparts, so re-copy them when the web versions change.
 
 ## Backend: server actions vs. the mobile API
 
@@ -31,9 +56,17 @@ parallel `/api/mobile/*` surface that wraps the same Prisma queries and
 `src/lib/*-actions.ts` mutations behind a bearer token instead of the cookie,
 returning JSON instead of doing a `redirect()`. Response shapes are kept in
 `kuopas/web/src/lib/mobile-serializers.ts`, matching `lib/types.ts` here
-field-for-field by hand, since the two repos don't share a package — tested
-end to end against the dev DB (login/register, buildings, `/me`, the full
-feed loop, the full chats loop, and a 401 on an unauthenticated request).
+field-for-field by hand, since the two repos don't share a package. Routes
+added for the newer features: `home`, `move-in-guide`, `notices`,
+`complaints`, `direct`, `communities`, `laundry`, `sauna`, `parking`,
+`feed/read`, `booking`, `household`, `roommates`, `market`, `lease`,
+`verification`, `guarantor` and `wellbeing`, plus photo/video (multipart)
+support on `feed/posts` and `complaints`. The app sends an `x-kuopas-locale`
+header so server-built error messages come back in the app's language.
+
+Booking grids are drawn in the device's time zone (the web draws them in the
+server's), so keep the web server on Europe/Helsinki time or bookings made
+from a phone can land on a different row on the web.
 
 ## Running
 
